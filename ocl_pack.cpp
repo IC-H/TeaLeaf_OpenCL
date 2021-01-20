@@ -28,7 +28,7 @@ void CloverChunk::packUnpackAllBuffers
     }
 
     // which buffer is being used for this operation
-    cl::Buffer * device_buffer = NULL;
+    cl_mem * device_buffer = NULL;
 
     switch (face)
     {
@@ -122,9 +122,8 @@ void CloverChunk::packUnpackAllBuffers
 
     if (!pack)
     {
-        queue.enqueueWriteBuffer(*device_buffer, CL_TRUE, 0,
-            n_exchanged*side_size*sizeof(double),
-            host_buffer);
+        status = clEnqueueWriteBuffer(queue, *device_buffer, CL_TRUE, 0, n_exchanged*side_size*sizeof(double), host_buffer, 0, NULL, NULL);
+        // checkError(status, "Failed to copy host_buffer to device");
     }
 
     for (int ii = 0; ii < NUM_FIELDS; ii++)
@@ -162,7 +161,7 @@ void CloverChunk::packUnpackAllBuffers
                 device_array = &which_array;\
             }
 
-            cl::Buffer * device_array = NULL;
+            cl_mem * device_array = NULL;
 
             switch (which_field)
             {
@@ -196,10 +195,9 @@ void CloverChunk::packUnpackAllBuffers
 
     if (pack)
     {
-        queue.finish();
-        queue.enqueueReadBuffer(*device_buffer, CL_TRUE, 0,
-            n_exchanged*side_size*sizeof(double),
-            host_buffer);
+        clFinish(queue);
+        status = clEnqueueReadBuffer(queue, *device_buffer, CL_TRUE, 0, n_exchanged*side_size*sizeof(double), host_buffer, 0, NULL, NULL);
+        // checkError(status, "Failed to copy host_buffer from device");
     }
 }
 

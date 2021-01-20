@@ -136,7 +136,42 @@ ifdef VERBOSE
 CXXFLAGS+=-D OCL_VERBOSE
 endif
 
+# Directories
+INC_DIRS := host/common/inc
+LIB_DIRS := 
+
+# Files
+INCS := $(wildcard host/inc/AOCLUtils/*.h)
+SRCS := $(wildcard host/inc/*.cpp  common/src/AOCLUtils/*.cpp)
+
+LIBS := rt pthread
+
 CXXFLAGS+=-D CL_USE_DEPRECATED_OPENCL_1_1_APIS -D __CL_ENABLE_EXCEPTIONS -g
+
+# OpenCL compile and link flags.
+AOCL_COMPILE_CONFIG := $(shell aocl compile-config )
+AOCL_LINK_LIBS := $(shell aocl ldlibs )
+AOCL_LINK_FLAGS := $(shell aocl ldflags )
+# Linking with defences enabled
+AOCL_LINK_FLAGS += -z noexecstack
+AOCL_LINK_FLAGS += -Wl,-z,relro,-z,now
+AOCL_LINK_FLAGS += -Wl,-Bsymbolic
+AOCL_LINK_FLAGS += -pie
+AOCL_LINK_CONFIG := $(AOCL_LINK_FLAGS) $(AOCL_LINK_LIBS)
+
+
+# Compiling with defences enabled
+CXXFLAGS += -fstack-protector
+CXXFLAGS += -D_FORTIFY_SOURCE=2
+CXXFLAGS += -Wformat -Wformat-security
+CXXFLAGS += -fPIE
+
+# We must force GCC to never assume that it can shove in its own
+# sse2/sse3 versions of strlen and strcmp because they will CRASH.
+# Very hard to debug!
+CXXFLAGS += -fPIC
+CFLAGS += -fPIC
+FLAGS += -fPIC
 
 C_FILES=\
 	timer_c.o
@@ -197,7 +232,11 @@ tea_leaf: Makefile $(FORTRAN_FILES) $(C_FILES) $(OCL_FILES)
 include makefile.deps
 
 %.o: %.cpp Makefile makefile.deps
-	$(CXX_MPI_COMPILER) $(CXXFLAGS) -c $< -o $@
+	$(CXX_MPI_COMPILER) $(SRCS) $(INCS) $(CXXFLAGS) $(foreach D,$(INC_DIRS),-I$D) \
+		$(AOCL_COMPILE_CONFIG) $(SRCS) $(INCS) $(AOCL_LINK_CONFIG) \
+		$(foreach D,$(LIB_DIRS),-L$D) \
+		$(foreach L,$(LIBS),-l$L) \
+		-c $< -o $@
 %_module.mod: %.f90 %.o
 	@true
 %.o: %.f90 Makefile makefile.deps

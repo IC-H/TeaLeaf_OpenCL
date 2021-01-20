@@ -1,3 +1,8 @@
+// #define KERNEL_X_MIN 0
+#define KERNEL_X_MAX 0
+// #define KERNEL_Y_MIN 0
+#define KERNEL_Y_MAX 0
+
 #include <kernel_files/macros_cl.cl>
 #include <kernel_files/tea_block_jacobi.cl>
 
@@ -52,6 +57,13 @@ __kernel void tea_leaf_calc_2norm
 
     REDUCTION(rro_shared, rro, SUM)
 }
+
+#undef KERNEL_X_MAX
+#undef KERNEL_Y_MAX
+// #define KERNEL_X_MIN 0
+#define KERNEL_X_MAX HALO_DEPTH
+// #define KERNEL_Y_MIN 0
+#define KERNEL_Y_MAX HALO_DEPTH
 
 __kernel void tea_leaf_init_common
 (__global const double * __restrict const density,

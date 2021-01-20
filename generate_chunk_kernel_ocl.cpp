@@ -31,22 +31,16 @@ const double* state_radius, const int* state_geometry,
 const int g_rect, const int g_circ, const int g_point)
 {
     #define TEMP_ALLOC(arr)                                         \
-        cl::Buffer tmp_state_##arr;                                 \
-        try                                                         \
-        {                                                           \
-            tmp_state_##arr = cl::Buffer(context,                   \
+        cl_mem tmp_state_##arr;                                     \
+            tmp_state_##arr = clCreateBuffer(context,               \
                 CL_MEM_READ_ONLY,                                   \
-                number_of_states*sizeof(*state_##arr));             \
-            queue.enqueueWriteBuffer(tmp_state_##arr,               \
+                number_of_states*sizeof(*state_##arr),              \
+                NULL, &status);                                     \
+            status = clEnqueueWriteBuffer(queue, tmp_state_##arr,   \
                 CL_TRUE,                                            \
                 0,                                                  \
                 number_of_states*sizeof(*state_##arr),              \
-                state_##arr);                                       \
-        }                                                           \
-        catch (cl::Error e)                                         \
-        {                                                           \
-            DIE("Error in creating %s buffer %d\n", #arr, e.err()); \
-        }
+                state_##arr, 0, NULL, NULL);
 
     TEMP_ALLOC(density);
     TEMP_ALLOC(energy);

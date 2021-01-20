@@ -31,7 +31,7 @@ typedef struct cell_info {
 
 // reductions
 typedef struct red_t {
-    cl::Kernel kernel;
+    cl_kernel kernel;
     cl::NDRange global_size;
     cl::NDRange local_size;
 } reduce_kernel_info_t;
@@ -43,36 +43,36 @@ class CloverChunk
 {
 private:
     // kernels
-    cl::Kernel set_field_device;
-    cl::Kernel field_summary_device;
+    cl_kernel set_field_device;
+    cl_kernel field_summary_device;
 
-    cl::Kernel generate_chunk_device;
-    cl::Kernel generate_chunk_init_device;
-    cl::Kernel generate_chunk_init_u_device;
+    cl_kernel generate_chunk_device;
+    cl_kernel generate_chunk_init_device;
+    cl_kernel generate_chunk_init_u_device;
 
-    cl::Kernel initialise_chunk_first_device;
-    cl::Kernel initialise_chunk_second_device;
+    cl_kernel initialise_chunk_first_device;
+    cl_kernel initialise_chunk_second_device;
 
     // halo updates
-    cl::Kernel update_halo_top_device;
-    cl::Kernel update_halo_bottom_device;
-    cl::Kernel update_halo_left_device;
-    cl::Kernel update_halo_right_device;
+    cl_kernel update_halo_top_device;
+    cl_kernel update_halo_bottom_device;
+    cl_kernel update_halo_left_device;
+    cl_kernel update_halo_right_device;
     // mpi packing
-    cl::Kernel pack_left_buffer_device;
-    cl::Kernel unpack_left_buffer_device;
-    cl::Kernel pack_right_buffer_device;
-    cl::Kernel unpack_right_buffer_device;
-    cl::Kernel pack_bottom_buffer_device;
-    cl::Kernel unpack_bottom_buffer_device;
-    cl::Kernel pack_top_buffer_device;
-    cl::Kernel unpack_top_buffer_device;
+    cl_kernel pack_left_buffer_device;
+    cl_kernel unpack_left_buffer_device;
+    cl_kernel pack_right_buffer_device;
+    cl_kernel unpack_right_buffer_device;
+    cl_kernel pack_bottom_buffer_device;
+    cl_kernel unpack_bottom_buffer_device;
+    cl_kernel pack_top_buffer_device;
+    cl_kernel unpack_top_buffer_device;
 
     // main buffers, with sub buffers for each offset
-    cl::Buffer left_buffer;
-    cl::Buffer right_buffer;
-    cl::Buffer bottom_buffer;
-    cl::Buffer top_buffer;
+    cl_mem left_buffer;
+    cl_mem right_buffer;
+    cl_mem bottom_buffer;
+    cl_mem top_buffer;
 
     #define TEA_ENUM_JACOBI     1
     #define TEA_ENUM_CG         2
@@ -81,41 +81,41 @@ private:
     int tea_solver;
 
     // tea leaf
-    cl::Kernel tea_leaf_cg_solve_init_p_device;
-    cl::Kernel tea_leaf_cg_solve_calc_w_device;
-    cl::Kernel tea_leaf_cg_solve_calc_ur_device;
-    cl::Kernel tea_leaf_cg_solve_calc_rrn_device;
-    cl::Kernel tea_leaf_cg_solve_calc_p_device;
-    cl::Buffer vector_z;
+    cl_kernel tea_leaf_cg_solve_init_p_device;
+    cl_kernel tea_leaf_cg_solve_calc_w_device;
+    cl_kernel tea_leaf_cg_solve_calc_ur_device;
+    cl_kernel tea_leaf_cg_solve_calc_rrn_device;
+    cl_kernel tea_leaf_cg_solve_calc_p_device;
+    cl_mem vector_z;
 
     // chebyshev solver
-    cl::Kernel tea_leaf_cheby_solve_init_p_device;
-    cl::Kernel tea_leaf_cheby_solve_calc_u_device;
-    cl::Kernel tea_leaf_cheby_solve_calc_p_device;
-    cl::Kernel tea_leaf_calc_2norm_device;
+    cl_kernel tea_leaf_cheby_solve_init_p_device;
+    cl_kernel tea_leaf_cheby_solve_calc_u_device;
+    cl_kernel tea_leaf_cheby_solve_calc_p_device;
+    cl_kernel tea_leaf_calc_2norm_device;
 
-    cl::Kernel tea_leaf_ppcg_solve_init_sd_device;
-    cl::Kernel tea_leaf_ppcg_solve_calc_sd_device;
-    cl::Kernel tea_leaf_ppcg_solve_update_r_device;
+    cl_kernel tea_leaf_ppcg_solve_init_sd_device;
+    cl_kernel tea_leaf_ppcg_solve_calc_sd_device;
+    cl_kernel tea_leaf_ppcg_solve_update_r_device;
 
     // used to hold the alphas/beta used in chebyshev solver - different from CG ones!
-    cl::Buffer ch_alphas_device, ch_betas_device;
+    cl_mem ch_alphas_device, ch_betas_device;
 
     // need more for the Kx/Ky arrays
-    cl::Kernel tea_leaf_jacobi_copy_u_device;
-    cl::Kernel tea_leaf_jacobi_solve_device;
+    cl_kernel tea_leaf_jacobi_copy_u_device;
+    cl_kernel tea_leaf_jacobi_solve_device;
 
-    cl::Kernel tea_leaf_block_init_device;
-    cl::Kernel tea_leaf_block_solve_device;
-    cl::Kernel tea_leaf_init_jac_diag_device;
-    cl::Buffer cp, bfp;
+    cl_kernel tea_leaf_block_init_device;
+    cl_kernel tea_leaf_block_solve_device;
+    cl_kernel tea_leaf_init_jac_diag_device;
+    cl_mem cp, bfp;
 
-    cl::Buffer u, u0;
-    cl::Kernel tea_leaf_finalise_device;
+    cl_mem u, u0;
+    cl_kernel tea_leaf_finalise_device;
     // TODO could be used by all - precalculate diagonal + scale Kx/Ky
-    cl::Kernel tea_leaf_calc_residual_device;
-    cl::Kernel tea_leaf_init_common_device;
-    cl::Kernel tea_leaf_zero_boundary_device;
+    cl_kernel tea_leaf_calc_residual_device;
+    cl_kernel tea_leaf_init_common_device;
+    cl_kernel tea_leaf_zero_boundary_device;
 
     // tolerance specified in tea.in
     float tolerance;
@@ -144,51 +144,52 @@ private:
     reduce_info_vec_t max_red_kernels_int;
 
     // ocl things
-    cl::CommandQueue queue;
-    cl::Platform platform;
-    cl::Device device;
-    cl::Context context;
+    cl_command_queue queue;
+    cl_platform_id platform = NULL;
+    cl_device_id device = NULL;
+    cl_context context = NULL;
+    cl_int status;
 
     // for passing into kernels for changing operation based on device type
     std::string device_type_prepro;
 
     // buffers
-    cl::Buffer density;
-    cl::Buffer energy0;
-    cl::Buffer energy1;
-    cl::Buffer volume;
+    cl_mem density;
+    cl_mem energy0;
+    cl_mem energy1;
+    cl_mem volume;
 
-    cl::Buffer cellx;
-    cl::Buffer celly;
-    cl::Buffer celldx;
-    cl::Buffer celldy;
-    cl::Buffer vertexx;
-    cl::Buffer vertexy;
-    cl::Buffer vertexdx;
-    cl::Buffer vertexdy;
+    cl_mem cellx;
+    cl_mem celly;
+    cl_mem celldx;
+    cl_mem celldy;
+    cl_mem vertexx;
+    cl_mem vertexy;
+    cl_mem vertexdx;
+    cl_mem vertexdy;
 
-    cl::Buffer xarea;
-    cl::Buffer yarea;
+    cl_mem xarea;
+    cl_mem yarea;
 
     // generic work arrays
-    cl::Buffer vector_p;
-    cl::Buffer vector_r;
-    cl::Buffer vector_w;
-    cl::Buffer vector_Mi;
-    cl::Buffer vector_Kx;
-    cl::Buffer vector_Ky;
-    cl::Buffer vector_sd;
+    cl_mem vector_p;
+    cl_mem vector_r;
+    cl_mem vector_w;
+    cl_mem vector_Mi;
+    cl_mem vector_Kx;
+    cl_mem vector_Ky;
+    cl_mem vector_sd;
 
     // for reduction in PdV
-    cl::Buffer PdV_reduce_buf;
+    cl_mem PdV_reduce_buf;
 
     // for reduction in field_summary
-    cl::Buffer reduce_buf_1;
-    cl::Buffer reduce_buf_2;
-    cl::Buffer reduce_buf_3;
-    cl::Buffer reduce_buf_4;
-    cl::Buffer reduce_buf_5;
-    cl::Buffer reduce_buf_6;
+    cl_mem reduce_buf_1;
+    cl_mem reduce_buf_2;
+    cl_mem reduce_buf_3;
+    cl_mem reduce_buf_4;
+    cl_mem reduce_buf_5;
+    cl_mem reduce_buf_6;
 
     // global size for kernels
     cl::NDRange global_size;
@@ -232,17 +233,17 @@ private:
     (std::stringstream& options,
      const std::string& source_name,
      const char* kernel_name,
-     cl::Kernel& kernel,
+     cl_kernel& kernel,
      int launch_x_min, int launch_x_max,
      int launch_y_min, int launch_y_max);
-    cl::Program compileProgram
+    cl_program compileProgram
     (const std::string& source,
      const std::string& options);
     // keep track of built programs to avoid rebuilding them
-    std::map<std::string, cl::Program> built_programs;
+    std::map<std::string, cl_program> built_programs;
     std::vector<double> dumpArray
     (const std::string& arr_name, int x_extra, int y_extra);
-    std::map<std::string, cl::Buffer> arr_names;
+    std::map<std::string, cl_mem> arr_names;
 
     /*
      *  initialisation subroutines
@@ -287,12 +288,18 @@ public:
     void update_halo_kernel(const int* fields, int depth,
         const int* chunk_neighbours);
     void update_array
-    (cl::Buffer& cur_array,
+    (cl_mem& cur_array,
     const cell_info_t& array_type,
     const int* chunk_neighbours,
     int depth);
 
     void set_field_kernel();
+
+    std::string getPlatformName(cl_platform_id pid);
+
+    cl_device_id *getDevices(cl_platform_id pid, cl_device_type dev_type, cl_uint *num_devices);
+
+    cl_platform_id findPlatform(const char *platform_name_search);
 
     // Tea leaf
     void tea_leaf_jacobi_solve_kernel
@@ -341,7 +348,7 @@ public:
 
     // enqueue a kernel
     void enqueueKernel
-    (cl::Kernel const& kernel,
+    (cl_kernel const& kernel,
      int line, const char* file,
      const cl::NDRange offset,
      const cl::NDRange global_range,
@@ -359,7 +366,7 @@ public:
     template <typename T>
     T reduceValue
     (reduce_info_vec_t& red_kernels,
-     const cl::Buffer& results_buf);
+     const cl_mem& results_buf);
 
     void packUnpackAllBuffers
     (int fields[NUM_FIELDS], int offsets[NUM_FIELDS], int depth,

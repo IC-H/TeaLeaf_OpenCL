@@ -23,6 +23,6 @@ void CloverChunk::initialise_chunk_kernel
     initialise_chunk_second_device.setArg(3, d_dy);
     ENQUEUE_OFFSET(initialise_chunk_second_device)
 
-    queue.finish();
+    clFinish(queue);
 }
 

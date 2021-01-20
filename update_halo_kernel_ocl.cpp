@@ -12,7 +12,7 @@ const int* depth)
 }
 
 void CloverChunk::update_array
-(cl::Buffer& cur_array,
+(cl_mem& cur_array,
 const cell_info_t& array_type,
 const int* chunk_neighbours,
 int depth)

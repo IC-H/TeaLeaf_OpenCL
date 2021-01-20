@@ -30,7 +30,7 @@ void CloverChunk::initReduction
     while (++ii)
     {
         // different kernels for different types and operations
-        cl::Kernel sum_double;
+        cl_kernel sum_double;
 
         // make options again
         std::stringstream options("");

@@ -6,6 +6,44 @@
 #include <iostream>
 #include <algorithm>
 
+
+void oclContextCallback(const char *errinfo, const void *, size_t, void *) {
+    printf("Context callback: %s\n", errinfo);
+}
+
+// scoped_array: assumes pointer was allocated with operator new[]; destroys with operator delete[]
+// Also supports allocation/reset with a number, which is the number of
+// elements of type T.
+template<typename T>
+class scoped_array {
+public:
+    typedef scoped_array<T> this_type;
+
+    scoped_array() : m_ptr(NULL) {}
+    scoped_array(T *ptr) : m_ptr(NULL) { reset(ptr); }
+    explicit scoped_array(size_t n) : m_ptr(NULL) { reset(n); }
+    ~scoped_array() { reset(); }
+
+    T *get() const { return m_ptr; }
+    operator T *() const { return m_ptr; }
+    T *operator ->() const { return m_ptr; }
+    T &operator *() const { return *m_ptr; }
+    T &operator [](int index) const { return m_ptr[index]; }
+
+    this_type &operator =(T *ptr) { reset(ptr); return *this; }
+
+    void reset(T *ptr = NULL) { delete[] m_ptr; m_ptr = ptr; }
+    void reset(size_t n) { reset(new T[n]); }
+    T *release() { T *ptr = m_ptr; m_ptr = NULL; return ptr; }
+
+private:
+    T *m_ptr;
+
+    // noncopyable
+    scoped_array(const this_type &);
+    this_type &operator =(const this_type &);
+};
+
 CloverChunk chunk;
 
 extern "C" void initialise_ocl_
@@ -112,19 +150,9 @@ static void listPlatforms
 void CloverChunk::initOcl
 (void)
 {
-    std::vector<cl::Platform> platforms;
-
-    try
-    {
-        cl::Platform::get(&platforms);
-    }
-    catch (cl::Error e)
-    {
-        DIE("Error in fetching platforms (%s), error %d\n", e.what(), e.err());
-    }
-
-    if (platforms.size() < 1)
-    {
+    platform = findPlatform("Intel(R) FPGA SDK for OpenCL(TM)");
+    if(platform == NULL) {
+        printf("ERROR: Unable to find Intel(R) FPGA OpenCL platform\n");
         DIE("No platforms found\n");
     }
 
@@ -219,134 +247,18 @@ void CloverChunk::initOcl
         if(!rank)fprintf(stdout, "None (no preconditioner specified in tea.in)\n");
     }
 
-    if (desired_vendor.find("no_setting") != std::string::npos)
-    {
-        DIE("No opencl_vendor specified in tea.in\n");
-    }
-    else if (desired_vendor.find("list") != std::string::npos)
-    {
-        // special case to print out platforms instead
-        fprintf(stdout, "Listing platforms\n\n");
-        listPlatforms(platforms);
-        exit(0);
-    }
-    else if (desired_vendor.find("any") != std::string::npos)
-    {
-        fprintf(stdout, "Choosing first platform that matches device type\n");
+    // Query the available OpenCL devices.
+    scoped_array<cl_device_id> devices;
+    cl_uint num_devices;
 
-        // go through all platforms
-        for (size_t ii = 0; ; ii++)
-        {
-            // if there are no platforms left to match
-            if (platforms.size() == ii)
-            {
-                fprintf(stderr, "Platforms available:\n");
+    devices.reset(getDevices(platform, CL_DEVICE_TYPE_ALL, &num_devices));
 
-                listPlatforms(platforms);
+    // We'll just use the first device.
+    device = devices[0];
 
-                DIE("No platform with specified device type was found\n");
-            }
-
-            std::vector<cl::Device> devices;
-
-            try
-            {
-                platforms.at(ii).getDevices(desired_type, &devices);
-            }
-            catch (cl::Error e)
-            {
-                if (e.err() == CL_DEVICE_NOT_FOUND)
-                {
-                    continue;
-                }
-                else
-                {
-                    DIE("Error %d (%s) in querying devices\n", e.err(), e.what());
-                }
-            }
-
-            if (devices.size() > 0)
-            {
-                platform = platforms.at(ii);
-
-                std::vector<cl::Platform> used(1, platform);
-                fprintf(stdout, "Using platform:\n");
-                listPlatforms(used);
-
-                // try to create a context with the desired type
-                cl_context_properties properties[3] = {CL_CONTEXT_PLATFORM,
-                    reinterpret_cast<cl_context_properties>(platform()), 0};
-
-                context = cl::Context(desired_type, properties);
-
-                break;
-            }
-        }
-    }
-    else
-    {
-        // go through all platforms
-        for (size_t ii = 0; ; )
-        {
-            std::string plat_name;
-            platforms.at(ii).getInfo(CL_PLATFORM_VENDOR, &plat_name);
-            std::transform(plat_name.begin(),
-                           plat_name.end(),
-                           plat_name.begin(),
-                           tolower);
-            fprintf(DBGOUT, "Checking platform %s\n", plat_name.c_str());
-
-            // if the platform name given matches one in the LUT
-            if (plat_name.find(desired_vendor) != std::string::npos)
-            {
-                fprintf(DBGOUT, "Correct vendor platform found\n");
-                platform = platforms.at(ii);
-
-                std::vector<cl::Platform> used(1, platform);
-                fprintf(stdout, "Using platform:\n");
-                listPlatforms(used);
-                break;
-            }
-            else if (platforms.size() == ++ii)
-            {
-                // if there are no platforms left to match
-                fprintf(stderr, "Platforms available:\n");
-
-                listPlatforms(platforms);
-
-                DIE("Correct vendor platform NOT found\n");
-            }
-        }
-
-        // try to create a context with the desired type
-        cl_context_properties properties[3] = {CL_CONTEXT_PLATFORM,
-            reinterpret_cast<cl_context_properties>(platform()), 0};
-
-        try
-        {
-            context = cl::Context(desired_type, properties);
-        }
-        catch (cl::Error e)
-        {
-            if (e.err() == CL_DEVICE_NOT_AVAILABLE)
-            {
-                DIE("Devices found but are not available (CL_DEVICE_NOT_AVAILABLE)\n");
-            }
-            // if there's no device of the desired type in this context
-            else if (e.err() == CL_DEVICE_NOT_FOUND)
-            {
-                fprintf(stderr, "No devices of specified type (%s) found in platform.\n", strType(desired_type).c_str());
-                fprintf(stderr, "Platforms available:\n");
-                listPlatforms(platforms);
-
-                DIE("Unable to get devices of desired type on platform");
-            }
-            else
-            {
-                DIE("Error %d (%s) in creating context\n", e.err(), e.what());
-            }
-        }
-    }
+    // Create the context.
+    context = clCreateContext(NULL, 1, &device, &oclContextCallback, NULL, &status);
+    // checkError(status, "Failed to create context");
 
     // gets devices one at a time to prevent conflicts (on emerald)
     int ranks, cur_rank = 0;
@@ -358,47 +270,6 @@ void CloverChunk::initOcl
     {
         if (rank == cur_rank)
         {
-            // index of device to use
-            int actual_device = 0;
-
-            // get devices - just choose the first one
-            std::vector<cl::Device> devices;
-            context.getInfo(CL_CONTEXT_DEVICES, &devices);
-
-            if (usefirst)
-            {
-                // always use specified device and ignore rank
-                actual_device = preferred_device;
-            }
-            else
-            {
-                actual_device = preferred_device + (rank % devices.size());
-            }
-
-            std::string devname;
-
-            if (preferred_device < 0)
-            {
-                // if none specified or invalid choice, choose 0
-                fprintf(stdout, "No device specified, choosing device 0\n");
-                actual_device = 0;
-                device = devices.at(actual_device);
-            }
-            else if (actual_device >= static_cast<int>(devices.size()))
-            {
-                DIE("Device %d was selected in rank %d but there are only %zu available\n",
-                    actual_device, rank, devices.size());
-            }
-            else
-            {
-                device = devices.at(actual_device);
-            }
-
-            device.getInfo(CL_DEVICE_NAME, &devname);
-
-            fprintf(stdout, "OpenCL using device %d (%s) in rank %d\n",
-                actual_device, devname.c_str(), rank);
-
             // choose reduction based on device type
             switch (desired_type)
             {
@@ -421,16 +292,72 @@ void CloverChunk::initOcl
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    // initialise command queue
-    if (profiler_on)
-    {
-        // turn on profiling
-        queue = cl::CommandQueue(context, device,
-                                 CL_QUEUE_PROFILING_ENABLE, NULL);
-    }
-    else
-    {
-        queue = cl::CommandQueue(context, device);
-    }
+    // Create the command queue.
+    printf("Creating queue\n");
+    queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &status);
+    // checkError(status, "Failed to create command queue");
 }
 
+// Returns the platform name.
+std::string CloverChunk::getPlatformName(cl_platform_id pid) {
+    cl_int status;
+
+    size_t sz;
+    status = clGetPlatformInfo(pid, CL_PLATFORM_NAME, 0, NULL, &sz);
+    // checkError(status, "Query for platform name size failed");
+
+    scoped_array<char> name(sz);
+    status = clGetPlatformInfo(pid, CL_PLATFORM_NAME, sz, name, NULL);
+    // checkError(status, "Query for platform name failed");
+
+    return name.get();
+}
+
+// Returns the list of all devices.
+cl_device_id *CloverChunk::getDevices(cl_platform_id pid, cl_device_type dev_type, cl_uint *num_devices) {
+    cl_int status;
+
+    status = clGetDeviceIDs(pid, dev_type, 0, NULL, num_devices);
+    // checkError(status, "Query for number of devices failed");
+
+    cl_device_id *dids = new cl_device_id[*num_devices];
+    status = clGetDeviceIDs(pid, dev_type, *num_devices, dids, NULL);
+    // checkError(status, "Query for device ids");
+
+    return dids;
+}
+
+// Searches all platforms for the first platform whose name
+// contains the search string (case-insensitive).
+cl_platform_id CloverChunk::findPlatform(const char *platform_name_search) {
+    cl_int status;
+
+    std::string search = platform_name_search;
+    std::transform(search.begin(), search.end(), search.begin(), tolower);
+
+    // Get number of platforms.
+    cl_uint num_platforms;
+    status = clGetPlatformIDs(0, NULL, &num_platforms);
+    // checkError(status, "Query for number of platforms failed");
+
+    // Get a list of all platform ids.
+    scoped_array<cl_platform_id> pids(num_platforms);
+    status = clGetPlatformIDs(num_platforms, pids, NULL);
+    // checkError(status, "Query for all platform ids failed");
+
+    // For each platform, get name and compare against the search string.
+    for(unsigned i = 0; i < num_platforms; ++i) {
+        std::string name = getPlatformName(pids[i]);
+
+        // Convert to lower case.
+        std::transform(name.begin(), name.end(), name.begin(), tolower);
+
+        if(name.find(search) != std::string::npos) {
+            // Found!
+            return pids[i];
+        }
+    }
+
+    // No platform found.
+    return NULL;
+}

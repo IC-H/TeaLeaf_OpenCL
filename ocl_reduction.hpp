@@ -6,7 +6,7 @@
 template <typename T>
 T CloverChunk::reduceValue
 (reduce_info_vec_t& red_kernels,
- const cl::Buffer& results_buf)
+ const cl_mem& results_buf)
 {
     // enqueue the kernels in order
     for (size_t ii = 0; ii < red_kernels.size(); ii++)
@@ -22,14 +22,11 @@ T CloverChunk::reduceValue
     T result;
 
     // make sure final reduction has finished
-    queue.finish();
+    clFinish(queue);
 
     // copy back the result and return
-    queue.enqueueReadBuffer(results_buf,
-                            CL_TRUE,
-                            0,
-                            sizeof(T),
-                            &result);
+    status = clEnqueueReadBuffer(queue, results_buf, CL_TRUE, 0, sizeof(T), &result, 0, NULL, NULL);
+    // checkError(status, "Failed to copy expand_to from device");
 
     return result;
 }

@@ -137,7 +137,7 @@ void CloverChunk::compileKernel
 (std::stringstream& options_orig_knl,
  const std::string& source_name,
  const char* kernel_name,
- cl::Kernel& kernel,
+ cl_kernel& kernel,
  int launch_x_min, int launch_x_max,
  int launch_y_min, int launch_y_max)
 {
@@ -165,7 +165,7 @@ void CloverChunk::compileKernel
     launch_specs[kernel_additional] = findPaddingSize(launch_x_min, launch_x_max, launch_y_min, launch_y_max);
 
     fprintf(DBGOUT, "Compiling %s...", kernel_name);
-    cl::Program program;
+    cl_program program;
 
 #if defined(PHI_SOURCE_PROFILING)
     std::stringstream plusprof("");
@@ -183,14 +183,14 @@ void CloverChunk::compileKernel
 
     if (built_programs.find(source_name + options) == built_programs.end())
     {
-        try
-        {
-            program = compileProgram(source_str, options);
-        }
-        catch (KernelCompileError err)
-        {
-            DIE("Errors (%d) in compiling %s (in %s):\n%s\n", err.err(), kernel_name, source_name.c_str(), err.what());
-        }
+        // Create the program.
+        const char *aocx_file_name = "enum_cg";
+        std::string binary_file = getBoardBinaryFile(aocx_file_name, device);
+        printf("Using AOCX: %s\n\n", binary_file.c_str());
+        program = createProgramFromBinary(context, binary_file.c_str(), &device, 1);
+
+        // Build the program that was just created.
+        status = clBuildProgram(program, 0, NULL, "", NULL, NULL);
 
         built_programs[source_name + options] = program;
     }
@@ -200,9 +200,11 @@ void CloverChunk::compileKernel
         program = built_programs.at(source_name + options);
     }
 
+
     try
     {
-        kernel = cl::Kernel(program, kernel_name);
+        printf("Creating kernel[%d]: %s\n", i, kernel_name);
+        kernel = clCreateKernel(program, kernel_name, &status);
     }
     catch (cl::Error e)
     {
@@ -214,8 +216,8 @@ void CloverChunk::compileKernel
     size_t max_wg_size;
 
     cl::detail::errHandler(
-        clGetKernelWorkGroupInfo(kernel(),
-                                 device(),
+        clGetKernelWorkGroupInfo(kernel,
+                                 device,
                                  CL_KERNEL_WORK_GROUP_SIZE,
                                  sizeof(size_t),
                                  &max_wg_size,
@@ -232,65 +234,123 @@ void CloverChunk::compileKernel
     fflush(DBGOUT);
 }
 
-cl::Program CloverChunk::compileProgram
-(const std::string& source,
- const std::string& options)
-{
-    // catches any warnings/errors in the build
-    std::stringstream errstream("");
+bool CloverChunk::fileExists(const char *file_name) {
+    return access(file_name, R_OK) != -1;
+}
 
-    // very verbose
-    //fprintf(stderr, "Making with source:\n%s\n", source.c_str());
-    //fprintf(DBGOUT, "Making with options string:\n%s\n", options.c_str());
-    fflush(DBGOUT);
-    cl::Program program;
+// Returns the device name.
+std::string CloverChunk::getDeviceName(cl_device_id did) {
+    cl_int status;
 
-    cl::Program::Sources sources;
-    sources = cl::Program::Sources(1, std::make_pair(source.c_str(), source.length()));
+    size_t sz;
+    status = clGetDeviceInfo(did, CL_DEVICE_NAME, 0, NULL, &sz);
+    // checkError(status, "Failed to get device name size");
 
-    try
-    {
-        program = cl::Program(context, sources);
+    scoped_array<char> name(sz);
+    status = clGetDeviceInfo(did, CL_DEVICE_NAME, sz, name, NULL);
+    // checkError(status, "Failed to get device name");
+
+    return name.get();
+}
+
+std::string CloverChunk::getBoardBinaryFile(const char *prefix, cl_device_id device) {
+    // First check if <prefix>.aocx exists. Use it if it does.
+    std::string file_name = std::string(prefix) + ".aocx";
+    if(fileExists(file_name.c_str())) {
+        return file_name;
     }
-    catch (cl::Error e)
-    {
-        DIE("%s %d\n", e.what(), e.err());
-    }
 
-    std::vector<cl::Device> dev_vec(1, device);
+    // Now get the name of the board. For Intel(R) FPGA SDK for OpenCL(TM) boards,
+    // the name of the device is presented as:
+    //  <board name> : ...
+    std::string device_name = getDeviceName(device);
 
-    try
-    {
-        program.build(dev_vec, options.c_str());
-    }
-    catch (cl::Error e)
-    {
-        fprintf(stderr, "Errors in creating program built with:\n%s\n", options.c_str());
+    // Now search for the " :" in the device name.
+    size_t end = device_name.find(" :");
+    if(end != std::string::npos) {
+        std::string board_name(device_name, 0, end);
 
-        errstream << e.what() << std::endl;
-
-        try
-        {
-            errstream << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
+        // Look for a AOCX with the name <prefix>_<board_name>_<version>.aocx.
+        file_name = std::string(prefix) + "_" + board_name + "_" + VERSION_STR + ".aocx";
+        if(fileExists(file_name.c_str())) {
+            return file_name;
         }
-        catch (cl::Error ie)
-        {
-            DIE("Error %d in retrieving build info\n", e.err());
-        }
-
-        std::string errs(errstream.str());
-        //DIE("%s\n", errs.c_str());
-        throw KernelCompileError(errs.c_str(), e.err());
     }
 
-    // return
-    errstream << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
-    std::string errs(errstream.str());
+    // At this point just use <prefix>.aocx. This file doesn't exist
+    // and this should trigger an error later.
+    return std::string(prefix) + ".aocx";
+}
 
-    // some will print out an empty warning log
-    if (errs.size() > 10)
-    {
-        fprintf(DBGOUT, "Warnings:\n%s\n", errs.c_str());
+
+// Loads a file in binary form.
+unsigned char *CloverChunk::loadBinaryFile(const char *file_name, size_t *size) {
+    // Open the File
+    FILE* fp;
+    long ftell_size;
+    size_t elements_read;
+    fp = fopen(file_name, "rb");
+    if(fp == 0) {
+        return NULL;
+    }
+
+    // Get the size of the file
+    fseek(fp, 0, SEEK_END);
+    ftell_size = ftell(fp);
+    if (ftell_size < 0) {
+        fclose(fp);
+        return NULL;
+    }
+    *size = (unsigned)ftell_size;
+
+    // Allocate space for the binary
+    unsigned char *binary = new unsigned char[*size];
+
+    // Go back to the file start
+    rewind(fp);
+
+    // Read the file into the binary
+    elements_read = fread((void*)binary, *size, 1, fp);
+    if(elements_read == 0) {
+        delete[] binary;
+        fclose(fp);
+        return NULL;
+    }
+
+    fclose(fp);
+    return binary;
+}
+
+// Create a program for all devices associated with the context.
+cl_program CloverChunk::createProgramFromBinary(cl_context context, const char *binary_file_name, const cl_device_id *devices, unsigned num_devices) {
+    // Early exit for potentially the most common way to fail: AOCX does not exist.
+    if(!fileExists(binary_file_name)) {
+        printf("AOCX file '%s' does not exist.\n", binary_file_name);
+        // checkError(CL_INVALID_PROGRAM, "Failed to load binary file");
+    }
+
+    // Load the binary.
+    size_t binary_size;
+    scoped_array<unsigned char> binary(loadBinaryFile(binary_file_name, &binary_size));
+    if(binary == NULL) {
+        // checkError(CL_INVALID_PROGRAM, "Failed to load binary file");
+    }
+
+    scoped_array<size_t> binary_lengths(num_devices);
+    scoped_array<unsigned char *> binaries(num_devices);
+    for(unsigned i = 0; i < num_devices; ++i) {
+        binary_lengths[i] = binary_size;
+        binaries[i] = binary;
+    }
+
+    cl_int status;
+    scoped_array<cl_int> binary_status(num_devices);
+
+    cl_program program = clCreateProgramWithBinary(context, num_devices, devices, binary_lengths,
+            (const unsigned char **) binaries.get(), binary_status, &status);
+    // checkError(status, "Failed to create program with binary");
+    for(unsigned i = 0; i < num_devices; ++i) {
+        // checkError(binary_status[i], "Failed to load binary for device");
     }
 
     return program;
@@ -331,7 +391,7 @@ void CloverChunk::initSizes
     size_t max_update_wg_sz;
     cl::detail::errHandler(
         clGetKernelWorkGroupInfo(update_halo_bottom_device(),
-                                 device(),
+                                 device,
                                  CL_KERNEL_WORK_GROUP_SIZE,
                                  sizeof(size_t),
                                  &max_update_wg_sz,
@@ -343,7 +403,7 @@ void CloverChunk::initSizes
     size_t local_column_size = 64;
 
     cl_device_type dtype;
-    device.getInfo(CL_DEVICE_TYPE, &dtype);
+    status = clGetDeviceInfo(device, CL_DEVICE_TYPE, sizeof(dtype), &dtype, NULL);
 
     if (dtype == CL_DEVICE_TYPE_ACCELERATOR)
     {

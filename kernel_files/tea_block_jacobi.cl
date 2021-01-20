@@ -1,3 +1,5 @@
+#ifndef __BLOCK_JACOBI__
+#define __BLOCK_JACOBI__
 
 #define COEF_A (-Ky[THARR2D(0,k+ 0, 0)])
 #define COEF_B (1.0 + (Ky[THARR2D(0,k+ 1, 0)] + Ky[THARR2D(0,k+ 0, 0)]) + (Kx[THARR2D(1,k+ 0, 0)] + Kx[THARR2D(0,k+ 0, 0)]))
@@ -104,3 +106,4 @@ __kernel void tea_leaf_block_init
     }
 }
 
+#endif

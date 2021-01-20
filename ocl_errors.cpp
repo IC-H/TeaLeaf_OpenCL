@@ -104,12 +104,17 @@ void CloverChunk::enqueueKernel
             fprintf(stdout, "\n");
             #endif
 
-            queue.enqueueNDRangeKernel(kernel,
-                                       offset_range,
-                                       global_range,
-                                       local_range,
-                                       events,
-                                       prof_event);
+            cl_event tmp;
+            status = clEnqueueNDRangeKernel(
+                            queue,
+                            kernel(),
+                            (cl_uint) global_range.dimensions(),
+                            offset_range.dimensions() != 0 ? (const ::size_t*) offset_range : NULL,
+                            (const ::size_t*) global_range,
+                            local_range.dimensions() != 0 ? (const ::size_t*) local_range : NULL,
+                            (events != NULL) ? (cl_uint) events->size() : 0,
+                            (events != NULL && events->size() > 0) ? (cl_event*) &events->front() : NULL,
+                            (event != NULL) ? &tmp : NULL);
 
             prof_event->wait();
 
@@ -123,12 +128,17 @@ void CloverChunk::enqueueKernel
         else
         {
             // just launch kernel
-            queue.enqueueNDRangeKernel(kernel,
-                                       offset_range,
-                                       global_range,
-                                       local_range,
-                                       events,
-                                       event);
+            cl_event tmp;
+            status = clEnqueueNDRangeKernel(
+                            queue,
+                            kernel(),
+                            (cl_uint) global_range.dimensions(),
+                            offset_range.dimensions() != 0 ? (const ::size_t*) offset_range : NULL,
+                            (const ::size_t*) global_range,
+                            local_range.dimensions() != 0 ? (const ::size_t*) local_range : NULL,
+                            (events != NULL) ? (cl_uint) events->size() : 0,
+                            (events != NULL && events->size() > 0) ? (cl_event*) &events->front() : NULL,
+                            (event != NULL) ? &tmp : NULL);
         }
     }
     catch (cl::Error e)
@@ -242,12 +252,12 @@ std::vector<double> CloverChunk::dumpArray
 
     std::vector<double> host_buffer(BUFSZ2D(x_extra, y_extra)/sizeof(double));
 
-    queue.finish();
+    clFinish(queue);
 
     try
     {
-        queue.enqueueReadBuffer(arr_names.at(arr_name),
-            CL_TRUE, 0, BUFSZ2D(x_extra, y_extra), &host_buffer[0]);
+        status = clEnqueueReadBuffer(queue, arr_names.at(arr_name), CL_TRUE, 0, BUFSZ2D(x_extra, y_extra), &host_buffer[0], 0, NULL, NULL);
+        // checkError(status, "Failed to copy mul_out from device");
     }
     catch (cl::Error e)
     {
@@ -259,7 +269,7 @@ std::vector<double> CloverChunk::dumpArray
         DIE("Error - %s was not in the arr_names map\n", arr_name.c_str());
     }
 
-    queue.finish();
+    clFinish(queue);
 
     return host_buffer;
 }

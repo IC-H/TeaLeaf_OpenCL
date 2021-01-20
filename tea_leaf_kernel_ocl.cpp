@@ -9,17 +9,17 @@ void CloverChunk::calcrxry
 (double dt, double * rx, double * ry)
 {
     // make sure intialise chunk has finished
-    queue.finish();
+    clFinish(queue);
 
     double dx, dy;
 
     try
     {
         // celldx/celldy never change, but done for consistency with fortran
-        queue.enqueueReadBuffer(celldx, CL_TRUE,
-            sizeof(double)*(1 + halo_exchange_depth), sizeof(double), &dx);
-        queue.enqueueReadBuffer(celldy, CL_TRUE,
-            sizeof(double)*(1 + halo_exchange_depth), sizeof(double), &dy);
+        status = clEnqueueReadBuffer(queue, celldx, CL_TRUE, sizeof(double)*(1 + halo_exchange_depth), sizeof(double), &dx, 0, NULL, NULL);
+        // checkError(status, "Error in copying back value from celldx\n");
+        status = clEnqueueReadBuffer(queue, celldy, CL_TRUE, sizeof(double)*(1 + halo_exchange_depth), sizeof(double), &dy, 0, NULL, NULL);
+        // checkError(status, "Error in copying back value from celldy\n");
     }
     catch (cl::Error e)
     {
@@ -59,8 +59,8 @@ void CloverChunk::tea_leaf_calc_2norm_kernel
     if (norm_array == 0)
     {
         // norm of u0
-        tea_leaf_calc_2norm_device.setArg(0, u0);
-        tea_leaf_calc_2norm_device.setArg(1, u0);
+        status = clSetKernelArg(tea_leaf_calc_2norm_device, 0, sizeof(cl_mem), (void *)(&u0));
+        status = clSetKernelArg(tea_leaf_calc_2norm_device, 1, sizeof(cl_mem), (void *)(&u0));
     }
     else if (norm_array == 1)
     {
@@ -102,17 +102,17 @@ void CloverChunk::tea_leaf_cheby_init_kernel
     size_t ch_buf_sz = n_coefs*sizeof(double);
 
     cl_ulong max_constant;
-    device.getInfo(CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, &max_constant);
+    status = clGetDeviceInfo(device, CL_DEVICE_AVAILABLE, sizeof(max_constant), &max_constant, NULL);
     if (ch_buf_sz > max_constant)
     {
         DIE("Size to store requested number of chebyshev coefs (%d coefs -> %zu bytes) bigger than device max (%lu bytes). Set tl_max_iters to a smaller value\n", n_coefs, ch_buf_sz, max_constant);
     }
 
     // upload to device
-    ch_alphas_device = cl::Buffer(context, CL_MEM_READ_ONLY, ch_buf_sz);
-    queue.enqueueWriteBuffer(ch_alphas_device, CL_TRUE, 0, ch_buf_sz, ch_alphas);
-    ch_betas_device = cl::Buffer(context, CL_MEM_READ_ONLY, ch_buf_sz);
-    queue.enqueueWriteBuffer(ch_betas_device, CL_TRUE, 0, ch_buf_sz, ch_betas);
+    ch_alphas_device = clCreateBuffer(context, CL_MEM_READ_ONLY, ch_buf_sz, NULL, &status);
+    status = clEnqueueWriteBuffer(queue, ch_alphas_device, CL_TRUE, 0, ch_buf_sz, ch_alphas, 0, NULL, NULL);
+    ch_betas_device = clCreateBuffer(context, CL_MEM_READ_ONLY, ch_buf_sz, NULL, &status);
+    status = clEnqueueWriteBuffer(queue, ch_betas_device, CL_TRUE, 0, ch_buf_sz, ch_betas, 0, NULL, NULL);
 
     tea_leaf_cheby_solve_init_p_device.setArg(10, theta);
     tea_leaf_cheby_solve_init_p_device.setArg(11, rx);
@@ -334,10 +334,10 @@ void CloverChunk::ppcg_init
     size_t ch_buf_sz = n_inner_steps*sizeof(double);
 
     // upload to device
-    ch_alphas_device = cl::Buffer(context, CL_MEM_READ_ONLY, ch_buf_sz);
-    queue.enqueueWriteBuffer(ch_alphas_device, CL_TRUE, 0, ch_buf_sz, ch_alphas);
-    ch_betas_device = cl::Buffer(context, CL_MEM_READ_ONLY, ch_buf_sz);
-    queue.enqueueWriteBuffer(ch_betas_device, CL_TRUE, 0, ch_buf_sz, ch_betas);
+    ch_alphas_device = clCreateBuffer(context, CL_MEM_READ_ONLY, ch_buf_sz, NULL, &status);
+    status = clEnqueueWriteBuffer(queue, ch_alphas_device, CL_TRUE, 0, ch_buf_sz, ch_alphas, 0, NULL, NULL);
+    ch_betas_device = clCreateBuffer(context, CL_MEM_READ_ONLY, ch_buf_sz, NULL, &status);
+    status = clEnqueueWriteBuffer(queue, ch_betas_device, CL_TRUE, 0, ch_buf_sz, ch_betas, 0, NULL, NULL);
 
     tea_leaf_ppcg_solve_calc_sd_device.setArg(8, ch_alphas_device);
     tea_leaf_ppcg_solve_calc_sd_device.setArg(9, ch_betas_device);

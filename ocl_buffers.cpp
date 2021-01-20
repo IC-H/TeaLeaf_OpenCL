@@ -7,22 +7,18 @@ void CloverChunk::initBuffers
     const std::vector<double> zeros(total_cells, 0.0);
 
     #define BUF_ALLOC(name, buf_sz)                 \
-        try                                         \
-        {                                           \
-            name = cl::Buffer(context,              \
-                              CL_MEM_READ_WRITE,    \
-                              (buf_sz));            \
-            queue.enqueueWriteBuffer(name,          \
-                                     CL_TRUE,       \
-                                     0,             \
-                                     (buf_sz),      \
-                                     &zeros[0]);    \
-        }                                           \
-        catch (cl::Error e)                         \
-        {                                           \
-            DIE("Error in creating %s buffer %d\n", \
-                    #name, e.err());                \
-        }
+            name = clCreateBuffer(                  \
+                context,                            \
+                CL_MEM_READ_WRITE,                  \
+                (buf_sz), NULL, &status);           \
+            status = clEnqueueWriteBuffer(          \
+                queue,                              \
+                name,                               \
+                CL_TRUE,                            \
+                0,                                  \
+                (buf_sz),                           \
+                &zeros[0],                          \
+                0, NULL, NULL);
 
     #define BUF1DX_ALLOC(name, x_e)     \
         BUF_ALLOC(name, (x_max+2*halo_exchange_depth+x_e) * sizeof(double))

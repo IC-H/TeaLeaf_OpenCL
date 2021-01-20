@@ -1,3 +1,14 @@
+#ifdef KERNEL_X_MAX
+    #undef KERNEL_X_MAX
+#endif
+#ifdef KERNEL_Y_MAX
+    #undef KERNEL_Y_MAX
+#endif
+// #define KERNEL_X_MIN 0
+#define KERNEL_X_MAX -1
+// #define KERNEL_Y_MIN 0
+#define KERNEL_Y_MAX -1
+
 #include <kernel_files/macros_cl.cl>
 
 __kernel void initialise_chunk_first

@@ -114,9 +114,17 @@ ocl_buffers.o: ocl_buffers.cpp ocl_common.hpp \
 ocl_errors.o: ocl_errors.cpp \
  ocl_common.hpp kernel_files/definitions.hpp types.hpp
 ocl_init.o: ocl_init.cpp \
- ocl_common.hpp kernel_files/definitions.hpp types.hpp ocl_strings.hpp
+ ocl_common.hpp kernel_files/definitions.hpp types.hpp ocl_strings.hpp \
+ host/common/inc/AOCLUtils/aocl_utils.h \
+ host/common/inc/AOCLUtils/opencl.h \
+ host/common/inc/AOCLUtils/options.h \
+ host/common/inc/AOCLUtils/scoped_ptrs.h
 ocl_kernels.o: ocl_kernels.cpp ocl_common.hpp \
- kernel_files/definitions.hpp types.hpp
+ kernel_files/definitions.hpp types.hpp \
+ host/common/inc/AOCLUtils/aocl_utils.h \
+ host/common/inc/AOCLUtils/opencl.h \
+ host/common/inc/AOCLUtils/options.h \
+ host/common/inc/AOCLUtils/scoped_ptrs.h
 ocl_pack.o: ocl_pack.cpp ocl_common.hpp kernel_files/definitions.hpp \
  types.hpp
 ocl_reduction.o: ocl_reduction.cpp ocl_common.hpp \
